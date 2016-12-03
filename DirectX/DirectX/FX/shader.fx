@@ -1,4 +1,4 @@
-cbuffer perObject : register(b0)
+cbuffer perObject
 {
 	float4x4 modelViewProjectionMatrix;
 };

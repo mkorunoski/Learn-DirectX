@@ -6,9 +6,54 @@
 #include <windowsx.h>
 #include <xnamath.h>
 
-#define WIDTH 800
-#define HEIGHT 600
+#define WIDTH 1240
+#define HEIGHT 768
 #define ReleaseCOM(x) { if(x){ x->Release(); x = 0; } }
+
+XMVECTORF32 white     = {1.0f, 1.0f, 1.0f, 1.0f};
+XMVECTORF32 black     = {0.0f, 0.0f, 0.0f, 1.0f};
+XMVECTORF32 red       = {1.0f, 0.0f, 0.0f, 1.0f};
+XMVECTORF32 green     = {0.0f, 1.0f, 0.0f, 1.0f};
+XMVECTORF32 blue      = {0.0f, 0.0f, 1.0f, 1.0f};
+XMVECTORF32 yellow    = {1.0f, 1.0f, 0.0f, 1.0f};
+XMVECTORF32 cyan      = {0.0f, 1.0f, 1.0f, 1.0f};
+XMVECTORF32 magenta   = {1.0f, 0.0f, 1.0f, 1.0f};
+
+XMVECTORF32 silver			= {0.75f, 0.75f, 0.75f, 1.0f};
+XMVECTORF32 lightSteelBlue	= {0.69f, 0.77f, 0.87f, 1.0f};
+
+struct Vertex
+{
+	XMFLOAT3 position;
+	XMFLOAT4 color;
+};
+
+Vertex vertices[] =
+{
+	{ XMFLOAT3(-1.0f, -1.0f, -1.0f), (const float*)&white   },
+	{ XMFLOAT3(-1.0f, +1.0f, -1.0f), (const float*)&black   },
+	{ XMFLOAT3(+1.0f, +1.0f, -1.0f), (const float*)&red     },
+	{ XMFLOAT3(+1.0f, -1.0f, -1.0f), (const float*)&green   },
+	{ XMFLOAT3(-1.0f, -1.0f, +1.0f), (const float*)&blue    },
+	{ XMFLOAT3(-1.0f, +1.0f, +1.0f), (const float*)&yellow  },
+	{ XMFLOAT3(+1.0f, +1.0f, +1.0f), (const float*)&cyan    },
+	{ XMFLOAT3(+1.0f, -1.0f, +1.0f), (const float*)&magenta }
+};
+
+UINT indices[] = {
+	0, 1, 2,
+	0, 2, 3,
+	4, 6, 5,
+	4, 7, 6,
+	4, 5, 1,
+	4, 1, 0,
+	3, 2, 6,
+	3, 6, 7,
+	1, 5, 6,
+	1, 6, 2,
+	4, 0, 3, 
+	4, 3, 7
+};
 
 HWND ghMainWnd = 0;
 
@@ -21,12 +66,9 @@ ID3D11RenderTargetView* renderTargetView;
 ID3D11Texture2D* depthStencilBuffer;
 ID3D11DepthStencilView* depthStencilView;
 
-XMVECTOR gray = { 0.1f, 0.1f, 0.1f, 1.0f };
-
-XMMATRIX modelMatrix;
-XMMATRIX viewMatrix;
-XMMATRIX projectionMatrix;
-XMMATRIX modelViewProjectionMatrix;
+XMFLOAT4X4 modelMatrix;
+XMFLOAT4X4 viewMatrix;
+XMFLOAT4X4 projectionMatrix;
 
 ID3DX11Effect* fx;
 ID3DX11EffectTechnique* tech;
@@ -34,31 +76,8 @@ ID3D11InputLayout* inputLayout;
 
 ID3DX11EffectMatrixVariable* fxModelViewProjectionMatrix;
 
-struct Vertex
-{
-	XMFLOAT3 position;
-	XMFLOAT3 color;
-};
-
-Vertex vertices[] =
-{
-	{ XMFLOAT3(-1.0f, -1.0f, 0.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
-	{ XMFLOAT3( 1.0f, -1.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
-	{ XMFLOAT3( 1.0f,  1.0f, 0.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
-	{ XMFLOAT3(-1.0f,  1.0f, 0.0f), XMFLOAT3(1.0f, 1.0f, 1.0f) }
-};
-UINT stride = sizeof(Vertex);
-UINT offset = 0;
-
-UINT indices[] =
-{
-	0, 1, 2,
-	0, 2, 3
-};
-
 ID3D11Buffer* vb;
 ID3D11Buffer* ib;
-
 
 void InitD3D()
 {
@@ -82,7 +101,6 @@ void InitD3D()
 	swapChainDesc.SampleDesc.Quality = numQualityLevels - 1;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 	swapChainDesc.Windowed = true;
-
 	IDXGIDevice* dxgiDevice = 0;
 	device->QueryInterface(__uuidof(IDXGIDevice), (void**)&dxgiDevice);
 	IDXGIAdapter* dxgiAdapter = 0;
@@ -111,103 +129,96 @@ void InitD3D()
 	depthStencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 	depthStencilDesc.CPUAccessFlags = 0;
 	depthStencilDesc.MiscFlags = 0;
-
 	device->CreateTexture2D(&depthStencilDesc, 0, &depthStencilBuffer);
 	device->CreateDepthStencilView(depthStencilBuffer, 0, &depthStencilView);
 
 	deviceContext->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
 
 	D3D11_VIEWPORT vp;
-	vp.Width = WIDTH;
-	vp.Height = HEIGHT;
+	vp.Width = static_cast<float>(WIDTH);
+	vp.Height = static_cast<float>(HEIGHT);
 	vp.TopLeftX = 0;
 	vp.TopLeftY = 0;
-	vp.MinDepth = 0;
-	vp.MaxDepth = 1;
+	vp.MinDepth = 0.0f;
+	vp.MaxDepth = 1.0f;
 	deviceContext->RSSetViewports(1, &vp);
 
-	modelMatrix = XMMatrixIdentity();
-
-	FXMVECTOR eyePosition = { 0.0f, 0.0f, -5.0f };
-	FXMVECTOR focusPosition = { 0.0f, 0.0f, 0.0f };
-	FXMVECTOR upDirection = { 0.0f, 1.0f, 0.0f };
-	viewMatrix = XMMatrixLookAtLH(eyePosition, focusPosition, upDirection);
-
-	projectionMatrix = XMMatrixPerspectiveFovLH(50.0f, float(WIDTH) / HEIGHT, 1.0, 1000.0f);
-
-	modelViewProjectionMatrix = projectionMatrix * viewMatrix * modelMatrix;
+	XMMATRIX I = XMMatrixIdentity();
+	XMStoreFloat4x4(&modelMatrix, I);
+	XMVECTOR eyePosition = XMVectorSet(5.0f, 5.0f, 5.0f, 1.0f);
+	FXMVECTOR focusPosition = XMVectorZero();
+	XMVECTOR upDirection = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+	XMMATRIX V = XMMatrixLookAtLH(eyePosition, focusPosition, upDirection);
+	XMStoreFloat4x4(&viewMatrix, V);
+	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * 3.1415926535f, float(WIDTH) / HEIGHT, 1.0f, 1000.0f);
+	XMStoreFloat4x4(&projectionMatrix, P);
 
 	ID3D10Blob* compiledShader = 0;
 	ID3D10Blob* compilationMsgs = 0;
-	HRESULT hr = D3DX11CompileFromFile(L"FX/shader.fx", 0, 0, 0, "fx_5_0", D3D10_SHADER_DEBUG | D3D10_SHADER_SKIP_OPTIMIZATION, 0, 0, &compiledShader, &compilationMsgs, 0);
-
-	if (compilationMsgs != 0)
-	{
-		MessageBoxA(0, (char*)compilationMsgs->GetBufferPointer(), 0, 0);
-		ReleaseCOM(compiledShader);
-	}
-
+	D3DX11CompileFromFile(L"FX/shader.fx", 0, 0, 0, "fx_5_0", D3D10_SHADER_DEBUG | D3D10_SHADER_SKIP_OPTIMIZATION, 0, 0, &compiledShader, &compilationMsgs, 0);		
 	D3DX11CreateEffectFromMemory(compiledShader->GetBufferPointer(), compiledShader->GetBufferSize(), 0, device, &fx);
+	ReleaseCOM(compiledShader);
 
+	tech = fx->GetTechniqueByName("Tech");
 	fxModelViewProjectionMatrix = fx->GetVariableByName("modelViewProjectionMatrix")->AsMatrix();
 
 	D3D11_INPUT_ELEMENT_DESC vertexDesc[] =
 	{
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	};
-	
-	tech = fx->GetTechniqueByName("Tech");
+	};		
 	D3DX11_PASS_DESC passDesc;
 	tech->GetPassByIndex(0)->GetDesc(&passDesc);
 	device->CreateInputLayout(vertexDesc, 2, passDesc.pIAInputSignature, passDesc.IAInputSignatureSize, &inputLayout);
 
 	D3D11_BUFFER_DESC vbd;
 	vbd.Usage = D3D11_USAGE_IMMUTABLE;
-	vbd.ByteWidth = sizeof(Vertex) * 4;
+	vbd.ByteWidth = sizeof(Vertex) * 8;
 	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vbd.CPUAccessFlags = 0;
 	vbd.MiscFlags = 0;
 	vbd.StructureByteStride = 0;
-
 	D3D11_SUBRESOURCE_DATA vinitData;
 	vinitData.pSysMem = vertices;
-
 	device->CreateBuffer(&vbd, &vinitData, &vb);
 
 	D3D11_BUFFER_DESC ibd;
 	ibd.Usage = D3D11_USAGE_IMMUTABLE;
-	ibd.ByteWidth = sizeof(UINT) * 6;
+	ibd.ByteWidth = sizeof(UINT) * 36;
 	ibd.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	ibd.CPUAccessFlags = 0;
 	ibd.MiscFlags = 0;
 	ibd.StructureByteStride = 0;
-
 	D3D11_SUBRESOURCE_DATA iinitData;
 	iinitData.pSysMem = indices;
-
 	device->CreateBuffer(&ibd, &iinitData, &ib);
 }
 
 void Draw()
 {
-	deviceContext->ClearRenderTargetView(renderTargetView, reinterpret_cast<float*>(&gray));
+	deviceContext->ClearRenderTargetView(renderTargetView, reinterpret_cast<float*>(&lightSteelBlue));
 	deviceContext->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	deviceContext->IASetInputLayout(inputLayout);
-		
+	
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
 	deviceContext->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
 	deviceContext->IASetIndexBuffer(ib, DXGI_FORMAT_R32_UINT, 0);
 
-	fxModelViewProjectionMatrix->SetMatrix((float*)&fxModelViewProjectionMatrix);
-
+	XMMATRIX model = XMLoadFloat4x4(&modelMatrix);
+	XMMATRIX view = XMLoadFloat4x4(&viewMatrix);
+	XMMATRIX projection = XMLoadFloat4x4(&projectionMatrix);
+	XMMATRIX modelViewProj = model * view * projection;
+	fxModelViewProjectionMatrix->SetMatrix(reinterpret_cast<float*>(&modelViewProj));
+	
 	D3DX11_TECHNIQUE_DESC techDesc;
 	tech->GetDesc(&techDesc);
 	for (UINT p = 0; p < techDesc.Passes; ++p)
 	{
 		tech->GetPassByIndex(p)->Apply(0, deviceContext);
-		deviceContext->DrawIndexed(6, 0, 0);
+		deviceContext->DrawIndexed(36, 0, 0);		
 	}
 
 	swapChain->Present(0, 0);
@@ -298,8 +309,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	switch (msg)
 	{
-	case WM_LBUTTONDOWN:
-		MessageBox(0, L"Hello, World", L"Hello", MB_OK);
+	case WM_LBUTTONDOWN:		
 		return 0;
 	case WM_KEYDOWN:
 		if (wParam == VK_ESCAPE)
